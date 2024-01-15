@@ -1,6 +1,7 @@
 import argparse
 import os
 import shutil
+from pathlib import Path
 
 
 def parse_argv():
@@ -11,44 +12,43 @@ def parse_argv():
     return args
 
 
-def parse_source_path(path: str, base: str) -> list[str]:
-    res_list = list()
-    if base != "":
-        p = os.path.join(base, path)
+def process_source_path(path: Path, base: Path | None, dest_folder: Path) -> None:
+
+    if base is not None:
+        p = base / path
     else:
         p = path
+        base = p
 
-    if not os.path.exists(p):
-        raise FileNotFoundError
+    if not p.exists():
+        raise FileNotFoundError(f"Path {p} does not exist.")
 
-    for i in os.listdir(p):
-        curr_p = os.path.join(p, i)
+    for i in p.iterdir():
         try:
-            if os.path.isdir(curr_p):
-                res_list.append(*parse_source_path(i, p))
-            elif os.path.isfile(curr_p):
-                res_list.append(curr_p)
+            if i.is_dir():
+                process_source_path(i, base, dest_folder)
+            elif i.is_file():
+                copy_file_to_dest_folder(i, dest_folder)
         except Exception as e:
             print("Error: %s", e)
-    return res_list
 
 
-def copy_files_to_dest_folder(files: list[str], dest_folder: str) -> None:
-    rel_files = [os.path.relpath(os.path.dirname(f), os.path.commonpath(files)) for f in files]
-
-    for i in range(len(rel_files)):
-        try:
-            destination_path = os.path.join(dest_folder, rel_files[i])
-            os.makedirs(destination_path, exist_ok=True)
-            shutil.copy(files[i], os.path.join(destination_path, os.path.basename(files[i])))
-        except FileExistsError as e:
-            print("Error:", e)
-        except Exception as e:
-            print("Error:", e)
+def copy_file_to_dest_folder(file: Path, dest_folder: Path) -> None:
+    try:
+        destination_path = dest_folder / file.suffix[1:]
+        os.makedirs(destination_path, exist_ok=True)
+        dest_file = destination_path / file.name
+        if dest_file.exists():
+            dest_file = destination_path / (os.path.splitext(file.name)[0] + "_dupl" + file.suffix)
+        shutil.copy(file, dest_file)
+    except FileExistsError as e:
+        print("Error:", e)
+    except Exception as e:
+        print("Error:", e)
 
 
 if __name__ == "__main__":
     args = parse_argv()
-    input_path = args.s
-    output_path = args.d
-    copy_files_to_dest_folder(parse_source_path(input_path, ""), output_path)
+    input_path = Path(args.s)
+    output_path = Path(args.d)
+    process_source_path(input_path, None, output_path)
